@@ -94,7 +94,10 @@ def plot_hbar(data, file_path, title=None, x_label=None, y_label=None):
     """Plot horizontal bars."""
     df = pd.DataFrame(data)
     plt.figure(figsize=(6, 4))
-    sns.barplot(y='class', x='value', data=df, edgecolor='gray', color='skyblue')
+    if 'std' in df.columns:
+        sns.barplot(y='class', x='value', data=df, edgecolor='gray', color='skyblue', xerr=df['std'])
+    else:
+        sns.barplot(y='class', x='value', data=df, edgecolor='gray', color='skyblue')
     for index, value in enumerate(df['value']):
         plt.text(df['value'].max()*0.025, index, f'{value:.4g}', color='black', ha="left", va="center")
 
@@ -271,6 +274,10 @@ def print_metric_pairs(metrics1, metrics2=None):
 
 def plot_metrics(metrics, labels, title):
     """Plot metrics."""
+    metrics_std = None
+    if isinstance(metrics, list):
+        metrics_mean, metrics_std = metrics
+        metrics = metrics_mean
     for p in ['A','B']:
         # table = metric_dict_to_table(metrics[p], labels)
         # points_2d = create_2d_map(table)
@@ -285,14 +292,15 @@ def plot_metrics(metrics, labels, title):
         #     file_path=BASE_FOLDER / f'docs/assets/evaluation/{title.lower()}_map_images_{p}_legend.png',
         #     title=f'{title.upper()} for {p} Images',
         #     label_dist=0)
-
         data = {
             'class': labels[1:],
             'value': [metrics[p][(labels[0],k)] for k in labels[1:]]
         }
+        if metrics_std is not None:
+            data['std'] = [metrics_std[p][(labels[0],k)] for k in labels[1:]]
         plot_hbar(
             data,
-            file_path=BASE_FOLDER / f'docs/assets/evaluation/{title.lower()}_bar_images_{p}.png',
+            file_path=BASE_FOLDER / f'docs/assets/evaluation/{title.lower()}_bar_images_{p}_with8.png',
             title=f'{title.upper()} for {p} Images',
             x_label=f'{title.upper()} to Real Images',
             y_label='')
@@ -361,7 +369,7 @@ def main():
 
     n_tests = 8
     test_cases_to_build_images = [] # Indexes of test cases to build images
-    recalculate_metrics = True # If False, will load metrics from pkl files
+    recalculate_metrics = False # If False, will load metrics from pkl files
     n_samples = 5
     # best_model = 5 # Index of the 'best' model
 
@@ -374,7 +382,7 @@ def main():
     # Build image data loaders
     model_list = {
         'Real': 'real',
-        'Oposite class': 'oposite',
+        # 'Oposite class': 'oposite',
         'CycleGAN': 'cyclegan',
         'CycleGAN-turbo': 'turbo',
     }
@@ -391,9 +399,9 @@ def main():
     print('========= FID =========')
     if recalculate_metrics:
         fid_metrics = get_fid(data_loaders)
-        # save_metrics(fid_metrics, 'fid_metrics.pkl')
+        save_metrics(fid_metrics, 'fid_metrics_with8.pkl')
     else:
-        fid_metrics = load_metrics('fid_metrics.pkl')
+        fid_metrics = load_metrics('fid_metrics_with8.pkl')
     print_metric_pairs(fid_metrics)
     plot_metrics(fid_metrics, labels, 'FID')
 
@@ -401,14 +409,14 @@ def main():
     print('========= LPIPS =========')
     if recalculate_metrics:
         lpips_metrics = get_lpips(data_loaders)
-        # save_metrics(lpips_metrics, 'lpips_metrics.pkl')
+        save_metrics(lpips_metrics, 'lpips_metrics_with8.pkl')
     else:
-        lpips_metrics = load_metrics('lpips_metrics.pkl')
+        lpips_metrics = load_metrics('lpips_metrics_with8.pkl')
     # plot_histograms(lpips_metrics, labels, 'LPIPS')
     lpips_metrics_mean = transform_metrics(lpips_metrics, transform=lambda x: float(x.mean()))
     lpips_metrics_std = transform_metrics(lpips_metrics, transform=lambda x: float(x.std()))
     print_metric_pairs(lpips_metrics_mean, lpips_metrics_std)
-    plot_metrics(lpips_metrics_mean, labels, 'LPIPS')
+    plot_metrics([lpips_metrics_mean, lpips_metrics_std], labels, 'LPIPS')
 
     # lpips_metrics_dist = lpips_distance(lpips_metrics_mean, lpips_metrics_std)
     # print("LPIPS 'distances'")
@@ -423,7 +431,7 @@ def main():
         img_list = df['file_name'].sample(n_samples).tolist()
         models = model_list.copy()
         models.pop('Real', None)
-        models.pop('Oposite class', None)
+        # models.pop('Oposite class', None)
         save_samples(img_list, p, models)
 
     # Calculate LPIPS
